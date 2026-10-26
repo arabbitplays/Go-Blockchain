@@ -2,6 +2,10 @@ package blockchain
 
 import (
 	"time"
+	"bytes"
+	"encoding/gob"
+	"fmt"
+	"os"
 )
 
 type Block struct {
@@ -21,4 +25,28 @@ func NewBlock(data string, prevBlockHash []byte) *Block {
 	block.Hash = hash[:]
 	block.Nonce = nonce 
 	return block
+}
+
+func (block *Block) Serialize() []byte {
+	var result bytes.Buffer
+	encoder := gob.NewEncoder(&result)
+
+	err := encoder.Encode(block) // TODO handle errors
+	if (err != nil) {
+		fmt.Fprintf(os.Stderr, "Encoding block failed")
+	}
+
+	return result.Bytes()
+}
+
+func DeserializeBlock(d []byte) *Block {
+	var block Block
+
+	decoder := gob.NewDecoder(bytes.NewReader(d))
+	err := decoder.Decode(&block) // TODO handle errors
+	if (err != nil) {
+		fmt.Fprintf(os.Stderr, "Decoding block failed")
+	}
+
+	return &block
 }
