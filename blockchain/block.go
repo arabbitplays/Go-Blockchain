@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"os"
 )
 
 type Block struct {
@@ -27,26 +26,26 @@ func NewBlock(data string, prevBlockHash []byte) *Block {
 	return block
 }
 
-func (block *Block) Serialize() []byte {
+func (block *Block) Serialize() ([]byte, error) {
 	var result bytes.Buffer
 	encoder := gob.NewEncoder(&result)
 
-	err := encoder.Encode(block) // TODO handle errors
+	err := encoder.Encode(block) 
 	if (err != nil) {
-		fmt.Fprintf(os.Stderr, "Encoding block failed")
+		return nil, fmt.Errorf("encoding block failed: %v", err)
 	}
 
-	return result.Bytes()
+	return result.Bytes(), err
 }
 
-func DeserializeBlock(d []byte) *Block {
+func DeserializeBlock(d []byte) (*Block, error) {
 	var block Block
 
 	decoder := gob.NewDecoder(bytes.NewReader(d))
 	err := decoder.Decode(&block) // TODO handle errors
 	if (err != nil) {
-		fmt.Fprintf(os.Stderr, "Decoding block failed")
+		return nil, fmt.Errorf("decoding block failed: %v", err)
 	}
 
-	return &block
+	return &block, err
 }

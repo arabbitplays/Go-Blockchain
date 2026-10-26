@@ -1,17 +1,18 @@
-package blockchain
+package main
 
 import (
-	"os"
-	"fmt"
+	"example.com/blockchainApp/blockchain"
 	"flag"
+	"fmt"
+	"os"
 	"strconv"
 )
 
 type CLI struct {
-	bc *Blockchain
+	bc *blockchain.Blockchain
 }
 
-func NewCLI(bc *Blockchain) *CLI {
+func NewCLI(bc *blockchain.Blockchain) *CLI {
 	return &CLI{bc}
 }
 
@@ -42,24 +43,23 @@ func (cli *CLI) Run() {
 
 	addBlockData := addBlockCmd.String("data", "", "Block data")
 
-	// TODO error handling
 	switch os.Args[1] {
 	case "addBlock":
-		_ = addBlockCmd.Parse(os.Args[2:])
-		break;
+		err := addBlockCmd.Parse(os.Args[2:])
+		if err != nil {
+			addBlockCmd.Usage()
+			os.Exit(1)
+		}
+		break
 	case "printChain":
 		_ = printChainCmd.Parse(os.Args[2:])
-		break;
+		break
 	default:
 		cli.printUsage()
 		os.Exit(1)
 	}
 
 	if addBlockCmd.Parsed() {
-		if *addBlockData == "" {
-			addBlockCmd.Usage()
-			os.Exit(1)
-		}
 		cli.addBlock(*addBlockData)
 	}
 
@@ -82,7 +82,7 @@ func (cli *CLI) printChain() {
 		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
 		fmt.Printf("Data: %s\n", block.Data)
 		fmt.Printf("Hash: %x\n", block.Hash)
-		pow := NewProofOfWork(block)
+		pow := blockchain.NewProofOfWork(block)
 		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
 		fmt.Println()
 

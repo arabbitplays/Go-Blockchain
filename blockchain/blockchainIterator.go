@@ -1,6 +1,7 @@
 package blockchain
  
 import (
+	"log"
 	"github.com/boltdb/bolt"
 )
 
@@ -17,10 +18,16 @@ func (bc *Blockchain) Iterator() *BlockchainIterator {
 func (iter *BlockchainIterator) Next() *Block {
 	var block *Block
 
+	// TODO error handling with transactions?
 	_ = iter.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		encodedBlock := b.Get(iter.currentHash)
-		block = DeserializeBlock(encodedBlock) 
+
+		var err error
+		block, err = DeserializeBlock(encodedBlock) 
+		if err != nil {
+			log.Panic(err)
+		}
 		
 		return nil;
 	})
