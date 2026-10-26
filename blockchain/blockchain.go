@@ -65,3 +65,7 @@ func NewBlockchain() *Blockchain {
 
 	return &bc
 }
+
+func (bc *Blockchain) Destroy() {
+	bc.db.Close()
+}
