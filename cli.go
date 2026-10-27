@@ -2,18 +2,15 @@ package main
 
 import (
 	"example.com/blockchainApp/blockchain"
+	"strconv"
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
+	"log"
+	//"strconv"
 )
 
 type CLI struct {
-	bc *blockchain.Blockchain
-}
-
-func NewCLI(bc *blockchain.Blockchain) *CLI {
-	return &CLI{bc}
 }
 
 func (cli *CLI) printUsage() {
@@ -38,51 +35,140 @@ func (cli *CLI) validateArgs() {
 func (cli *CLI) Run() {
 	cli.validateArgs()
 
-	addBlockCmd := flag.NewFlagSet("addBlock", flag.ExitOnError)
-	printChainCmd := flag.NewFlagSet("printChain", flag.ExitOnError)
+	// nodeID := os.Getenv("NODE_ID")
+	// if nodeID == "" {
+	// 	fmt.Printf("NODE_ID env. var is not set!")
+	// 	os.Exit(1)
+	// }
 
-	addBlockData := addBlockCmd.String("data", "", "Block data")
+	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
+	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
+	// createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
+	// listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
+	// printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+	// reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
+	// sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
+	// startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
+
+	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
+	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
+	// sendFrom := sendCmd.String("from", "", "Source wallet address")
+	// sendTo := sendCmd.String("to", "", "Destination wallet address")
+	// sendAmount := sendCmd.Int("amount", 0, "Amount to send")
+	// sendMine := sendCmd.Bool("mine", false, "Mine immediately on the same node")
+	// startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
 
 	switch os.Args[1] {
-	case "addBlock":
-		err := addBlockCmd.Parse(os.Args[2:])
+	case "printchain":
+		err := printChainCmd.Parse(os.Args[2:])
 		if err != nil {
-			addBlockCmd.Usage()
-			os.Exit(1)
+			log.Panic(err)
 		}
-		break
-	case "printChain":
-		_ = printChainCmd.Parse(os.Args[2:])
-		break
+	case "getbalance":
+		err := getBalanceCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+	case "createblockchain":
+		err := createBlockchainCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+	// case "createwallet":
+	// 	err := createWalletCmd.Parse(os.Args[2:])
+	// 	if err != nil {
+	// 		log.Panic(err)
+	// 	}
+	// case "listaddresses":
+	// 	err := listAddressesCmd.Parse(os.Args[2:])
+	// 	if err != nil {
+	// 		log.Panic(err)
+	// 	}
+	// case "printchain":
+	// 	err := printChainCmd.Parse(os.Args[2:])
+	// 	if err != nil {
+	// 		log.Panic(err)
+	// 	}
+	// case "reindexutxo":
+	// 	err := reindexUTXOCmd.Parse(os.Args[2:])
+	// 	if err != nil {
+	// 		log.Panic(err)
+	// 	}
+	// case "send":
+	// 	err := sendCmd.Parse(os.Args[2:])
+	// 	if err != nil {
+	// 		log.Panic(err)
+	// 	}
+	// case "startnode":
+	// 	err := startNodeCmd.Parse(os.Args[2:])
+	// 	if err != nil {
+	// 		log.Panic(err)
+	// 	}
 	default:
 		cli.printUsage()
 		os.Exit(1)
 	}
 
-	if addBlockCmd.Parsed() {
-		cli.addBlock(*addBlockData)
-	}
-
 	if printChainCmd.Parsed() {
 		cli.printChain()
 	}
+
+	if createBlockchainCmd.Parsed() {
+		cli.createBlockchain(*createBlockchainAddress)
+	}
+
+	if getBalanceCmd.Parsed() {
+		cli.getBalance(*getBalanceAddress)
+	}
 }
 
-func (cli *CLI) addBlock(data string) {
-	cli.bc.AddBlock(data)
-	fmt.Println("Success!")
+func (cli *CLI) createBlockchain(address string) {
+	bc := blockchain.CreateBlockchain(address)
+	defer bc.Destroy()
+
+	fmt.Println("Done!")
+}
+
+func (cli *CLI) getBalance(address string) {
+	bc := blockchain.NewBlockchain()
+	defer bc.Destroy()
+
+	UTXO := bc.FindUnspentOutputs(address)
+
+	balance := 0
+	for _, out := range(UTXO) {
+		balance += out.Value
+	}
+
+	fmt.Printf("Balance of '%s': %d\n", address, balance)
 }
 
 func (cli *CLI) printChain() {
-	bci := cli.bc.Iterator()
+	bc := blockchain.NewBlockchain()
+	defer bc.Destroy()
 
+	bci := bc.Iterator()
 	for {
 		block := bci.Next()
 
 		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
-		fmt.Printf("Data: %s\n", block.Data)
+		//fmt.Printf("Data: %s\n", block.Data)
 		fmt.Printf("Hash: %x\n", block.Hash)
 		pow := blockchain.NewProofOfWork(block)
+
+		for txIdx, tx := range(block.Transactions) {
+			fmt.Printf("Transaction %d:\n", txIdx)
+			for _, in := range(tx.Vin) {
+				fmt.Printf("In: %s\n", in.ScriptSig)
+			}
+
+			for _, out := range(tx.Vout) {
+				fmt.Printf("Out: %d %s\n", out.Value, out.ScriptPubKey)
+			}
+			fmt.Println()
+		}
+
 		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
 		fmt.Println()
 
