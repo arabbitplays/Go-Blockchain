@@ -12,17 +12,6 @@ import (
 
 const subsidy = 10
 
-type TXInput struct {
-	TxId []byte
-	Vout int
-	ScriptSig string
-}
-
-type TXOutput struct {
-	Value int
-	ScriptPubKey string
-}
-
 type Transaction struct {
 	ID []byte
 	Vin []TXInput
@@ -56,13 +45,16 @@ func IsCoinbaseTX(tx *Transaction) bool {
 	return len(tx.Vin) == 1 && tx.Vin[0].Vout == -1
 }
 
-func NewCoinbaseTX(to, data string) *Transaction {
+func NewCoinbaseTX(to string, data string) *Transaction {
 	if data == "" {
 		data = fmt.Sprintf("Reward to: %s", to)
 	}
 
-	txIn := TXInput{[]byte{}, -1, data}
-	txOut := TXOutput{subsidy, to}
+	walletRepo := NewWalletRepo()
+	wallet := walletRepo.GetWallet(to)
+
+	txIn := TXInput{[]byte{}, -1, nil, []byte(data)}
+	txOut := TXOutput{subsidy, HashPubKey(wallet.PublicKey)}
 	tx := Transaction{nil, []TXInput{txIn}, []TXOutput{txOut}}
 	tx.ID = tx.Hash()
 
@@ -80,21 +72,24 @@ func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Tr
 		return nil, errors.New(msg)
 	}
 
+	walletRepo := NewWalletRepo()
+	wallet := walletRepo.GetWallet(from)
+
 	for txid, outIndices := range spendableOutputs {
 		txId, _ := hex.DecodeString(txid)
 
 		for _, outIdx := range outIndices {
-			in := TXInput{txId, outIdx, from}
+			in := TXInput{txId, outIdx, nil, wallet.PublicKey}
 			inputs = append(inputs, in)
 		}
 	}
 
-	spentOutput := TXOutput{amount, to}
+	spentOutput := *NewTXOutput(amount, to)
 	outputs = append(outputs, spentOutput)
 
 	if acc > amount {
 		change := acc - amount
-		changeOutput := TXOutput{change, from}
+		changeOutput := *NewTXOutput(change, from)
 		outputs = append(outputs, changeOutput)
 	}
 
@@ -106,7 +101,8 @@ func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Tr
 
 func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
 	spendableOutputs := make(map[string][]int)
-	unspentTXs := bc.findUnspentTransactions(address)
+	pubKeyHash := GetPubKeyHashFromAddress([]byte(address))
+	unspentTXs := bc.findUnspentTransactions(pubKeyHash)
 
 	accumulatedValue := 0
 
@@ -114,7 +110,7 @@ func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map
 	for _, tx := range(unspentTXs) {
 		txId := hex.EncodeToString(tx.ID)
 		for outIdx, out := range(tx.Vout) {
-			if out.CanBeUnlockedWith(address) {
+			if out.IsLockedWithKey(pubKeyHash) {
 				accumulatedValue += out.Value
 				spendableOutputs[txId] = append(spendableOutputs[txId], outIdx)
 
@@ -130,11 +126,13 @@ func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map
 
 func (bc *Blockchain) FindUnspentOutputs(address string) []TXOutput {
 	var UTXO []TXOutput
-	unspentTXs := bc.findUnspentTransactions(address)
+	pubKeyHash := GetPubKeyHashFromAddress([]byte(address))
+	unspentTXs := bc.findUnspentTransactions(pubKeyHash)
+
 
 	for _, tx := range(unspentTXs) {
 		for _, out := range(tx.Vout) {
-			if out.CanBeUnlockedWith(address) {
+			if out.IsLockedWithKey(pubKeyHash) {
 				UTXO = append(UTXO, out)
 			}
 		}
@@ -143,7 +141,7 @@ func (bc *Blockchain) FindUnspentOutputs(address string) []TXOutput {
 	return UTXO
 }
 
-func (bc *Blockchain) findUnspentTransactions(address string) []Transaction {
+func (bc *Blockchain) findUnspentTransactions(pubKeyHash []byte) []Transaction {
 	iter := bc.Iterator()
 	var unspentTXs []Transaction
 	spentTXOs := make(map[string][]int)
@@ -164,14 +162,14 @@ func (bc *Blockchain) findUnspentTransactions(address string) []Transaction {
 					}
 				}
 
-				if out.CanBeUnlockedWith(address) {
+				if out.IsLockedWithKey(pubKeyHash) {
 					unspentTXs = append(unspentTXs, *tx)
 				}
 			}
 
 			if IsCoinbaseTX(tx) == false {
 				for _, in := range(tx.Vin) {
-					if in.CanUnlockOutputWith(address) {
+					if in.UsesKey(pubKeyHash) {
 						inTxId := hex.EncodeToString(in.TxId)
 						spentTXOs[inTxId] = append(spentTXOs[inTxId], in.Vout)
 					}
@@ -187,12 +185,4 @@ func (bc *Blockchain) findUnspentTransactions(address string) []Transaction {
 	return unspentTXs
 }
 
-// returns true if this input can unlock an output that needs the given data to be unlocked
-func (in *TXInput) CanUnlockOutputWith(unlockingData string) bool {
-	return in.ScriptSig == unlockingData
-}
-
-func (out *TXOutput) CanBeUnlockedWith(unlockingData string) bool {
-	return out.ScriptPubKey == unlockingData
-}
 

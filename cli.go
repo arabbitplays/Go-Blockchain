@@ -2,12 +2,10 @@ package main
 
 import (
 	"example.com/blockchainApp/blockchain"
-	"strconv"
 	"flag"
 	"fmt"
 	"os"
 	"log"
-	//"strconv"
 )
 
 type CLI struct {
@@ -41,12 +39,11 @@ func (cli *CLI) Run() {
 	// 	os.Exit(1)
 	// }
 
-	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
-	// createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
-	// listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
-	// printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
+	listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
+	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
 	// reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	// startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
@@ -60,11 +57,6 @@ func (cli *CLI) Run() {
 	// startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
 
 	switch os.Args[1] {
-	case "printchain":
-		err := printChainCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
-		}
 	case "getbalance":
 		err := getBalanceCmd.Parse(os.Args[2:])
 		if err != nil {
@@ -75,21 +67,21 @@ func (cli *CLI) Run() {
 		if err != nil {
 			log.Panic(err)
 		}
-	// case "createwallet":
-	// 	err := createWalletCmd.Parse(os.Args[2:])
-	// 	if err != nil {
-	// 		log.Panic(err)
-	// 	}
-	// case "listaddresses":
-	// 	err := listAddressesCmd.Parse(os.Args[2:])
-	// 	if err != nil {
-	// 		log.Panic(err)
-	// 	}
-	// case "printchain":
-	// 	err := printChainCmd.Parse(os.Args[2:])
-	// 	if err != nil {
-	// 		log.Panic(err)
-	// 	}
+	case "createwallet":
+		err := createWalletCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+	case "listaddresses":
+		err := listAddressesCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+	case "printchain":
+		err := printChainCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 	// case "reindexutxo":
 	// 	err := reindexUTXOCmd.Parse(os.Args[2:])
 	// 	if err != nil {
@@ -110,16 +102,24 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
-	if printChainCmd.Parsed() {
-		cli.printChain()
-	}
-
 	if createBlockchainCmd.Parsed() {
 		cli.createBlockchain(*createBlockchainAddress)
 	}
 
 	if getBalanceCmd.Parsed() {
 		cli.getBalance(*getBalanceAddress)
+	}
+
+	if createWalletCmd.Parsed() {
+		cli.createWallet()
+	}
+
+	if listAddressesCmd.Parsed() {
+		cli.listAddresses()
+	}
+
+	if printChainCmd.Parsed() {
+		cli.printChain()
 	}
 
 	if sendCmd.Parsed() {
@@ -135,6 +135,10 @@ func (cli *CLI) createBlockchain(address string) {
 }
 
 func (cli *CLI) getBalance(address string) {
+	if !blockchain.ValidateAddress(address) {
+		log.Panic("ERROR: Address is not valid")
+	}
+
 	bc := blockchain.NewBlockchain()
 	defer bc.Destroy()
 
@@ -148,7 +152,30 @@ func (cli *CLI) getBalance(address string) {
 	fmt.Printf("Balance of '%s': %d\n", address, balance)
 }
 
+func (cli *CLI) createWallet() {
+	walletRepo := blockchain.NewWalletRepo()
+	wallet := walletRepo.CreateNewWallet()
+
+	fmt.Printf("Your new address: %s", wallet.GetAddress())
+}
+
+func (cli *CLI) listAddresses() {
+	walletRepo := blockchain.NewWalletRepo()
+	addresses := walletRepo.GetAddresses()
+
+	for _, adr := range addresses {
+		fmt.Printf("%s\n", adr)
+	}
+}
+
 func (cli *CLI) send(from string, to string, amount int) {
+	if !blockchain.ValidateAddress(from) {
+		log.Panic("ERROR: Sender address is not valid")
+	}
+	if !blockchain.ValidateAddress(to) {
+		log.Panic("ERROR: Recipient address is not valid")
+	}
+
 	bc := blockchain.NewBlockchain()
 	defer bc.Destroy()
 
@@ -167,35 +194,35 @@ func (cli *CLI) send(from string, to string, amount int) {
 }
 
 func (cli *CLI) printChain() {
-	bc := blockchain.NewBlockchain()
-	defer bc.Destroy()
-
-	bci := bc.Iterator()
-	for {
-		block := bci.Next()
-
-		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
-		//fmt.Printf("Data: %s\n", block.Data)
-		fmt.Printf("Hash: %x\n", block.Hash)
-		pow := blockchain.NewProofOfWork(block)
-
-		for txIdx, tx := range(block.Transactions) {
-			fmt.Printf("Transaction %d:\n", txIdx)
-			for _, in := range(tx.Vin) {
-				fmt.Printf("In: %s\n", in.ScriptSig)
-			}
-
-			for _, out := range(tx.Vout) {
-				fmt.Printf("Out: %d %s\n", out.Value, out.ScriptPubKey)
-			}
-			fmt.Println()
-		}
-
-		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
-		fmt.Println()
-
-		if len(block.PrevBlockHash) == 0 {
-			break
-		}
-	}
+	// bc := blockchain.NewBlockchain()
+	// defer bc.Destroy()
+	//
+	// bci := bc.Iterator()
+	// for {
+	// 	block := bci.Next()
+	//
+	// 	fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
+	// 	//fmt.Printf("Data: %s\n", block.Data)
+	// 	fmt.Printf("Hash: %x\n", block.Hash)
+	// 	pow := blockchain.NewProofOfWork(block)
+	//
+	// 	for txIdx, tx := range(block.Transactions) {
+	// 		fmt.Printf("Transaction %d:\n", txIdx)
+	// 		for _, in := range(tx.Vin) {
+	// 			fmt.Printf("In: %s\n", in.ScriptSig)
+	// 		}
+	//
+	// 		for _, out := range(tx.Vout) {
+	// 			fmt.Printf("Out: %d %s\n", out.Value, out.ScriptPubKey)
+	// 		}
+	// 		fmt.Println()
+	// 	}
+	//
+	// 	fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
+	// 	fmt.Println()
+	//
+	// 	if len(block.PrevBlockHash) == 0 {
+	// 		break
+	// 	}
+	// }
 }
