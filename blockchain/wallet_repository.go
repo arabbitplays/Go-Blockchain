@@ -1,11 +1,10 @@
 package blockchain
 
-import(
+import (
 	"bytes"
 	"crypto/elliptic"
 	"encoding/gob"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 )
@@ -19,7 +18,7 @@ const walletFile = "wallet_%s.dat"
 func NewWalletRepo() *WalletRepo {
 	var repo WalletRepo
 	repo.Wallets = make(map[string]*Wallet)
-	
+
 	repo.loadFromFile()
 
 	return &repo
@@ -36,7 +35,7 @@ func (repo *WalletRepo) GetAddresses() []string {
 func (repo *WalletRepo) CreateNewWallet() *Wallet {
 	wallet := NewWallet()
 	address := fmt.Sprintf("%s", wallet.GetAddress())
-	
+
 	repo.Wallets[address] = wallet
 	repo.saveToFile()
 
@@ -48,17 +47,17 @@ func (repo *WalletRepo) GetWallet(address string) Wallet {
 }
 
 func (repo *WalletRepo) loadFromFile() error {
-	walletFile := fmt.Sprintf(walletFile, nodeId)
+	walletFile := fmt.Sprintf(walletFile, nodeID)
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		return err
 	}
-	
-	fileContent, err := ioutil.ReadFile(walletFile)
+
+	fileContent, err := os.ReadFile(walletFile)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	var loadedRepo WalletRepo 
+	var loadedRepo WalletRepo
 	gob.Register(elliptic.P256())
 	decoder := gob.NewDecoder(bytes.NewReader(fileContent))
 	err = decoder.Decode(&loadedRepo)
@@ -81,10 +80,9 @@ func (repo WalletRepo) saveToFile() {
 		log.Panic(err)
 	}
 
-	walletFile := fmt.Sprintf(walletFile, nodeId)
-	ioutil.WriteFile(walletFile, content.Bytes(), 0644)
+	walletFile := fmt.Sprintf(walletFile, nodeID)
+	os.WriteFile(walletFile, content.Bytes(), 0644)
 	if err != nil {
 		log.Panic(err)
 	}
 }
-

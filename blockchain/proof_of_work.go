@@ -1,11 +1,11 @@
 package blockchain
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"math"
 	"math/big"
-	"bytes"
-	"fmt"
 )
 
 const targetBits = 20
@@ -15,19 +15,19 @@ var (
 )
 
 type ProofOfWork struct {
-	block *Block
+	block  *Block
 	target *big.Int
 }
 
 func NewProofOfWork(block *Block) *ProofOfWork {
 	target := big.NewInt(1)
-	target.Lsh(target, uint(256 - targetBits))
+	target.Lsh(target, uint(256-targetBits))
 	return &ProofOfWork{block, target}
 }
 
 func (pow *ProofOfWork) prepareData(nonce int) []byte {
 	data := bytes.Join([][]byte{
-		pow.block.PrevBlockHash, 
+		pow.block.PrevBlockHash,
 		pow.block.HashTransactions(),
 		IntToHex(pow.block.Timestamp),
 		IntToHex(int64(targetBits)),
@@ -47,15 +47,15 @@ func (pow *ProofOfWork) Run() (int, []byte) {
 	for nonce < maxNonce {
 		data := pow.prepareData(nonce)
 		hash = sha256.Sum256(data)
-		if (math.Remainder(float64(nonce), 100000) == 0) {
+		if math.Remainder(float64(nonce), 100000) == 0 {
 			fmt.Printf("%x\n", hash)
 		}
-	
+
 		hashInt.SetBytes(hash[:])
-		if (hashInt.Cmp(pow.target) == -1) {
-			break;
+		if hashInt.Cmp(pow.target) == -1 {
+			break
 		} else {
-			nonce++;
+			nonce++
 		}
 	}
 	fmt.Printf("\n\n")

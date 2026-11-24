@@ -1,11 +1,12 @@
 package main
 
 import (
-	"example.com/blockchainApp/blockchain"
 	"flag"
 	"fmt"
-	"os"
 	"log"
+	"os"
+
+	"example.com/blockchainApp/blockchain"
 )
 
 type CLI struct {
@@ -128,8 +129,8 @@ func (cli *CLI) Run() {
 }
 
 func (cli *CLI) createBlockchain(address string) {
-	bc := blockchain.CreateBlockchain(address)
-	defer bc.Destroy()
+	bc := blockchain.Create(address)
+	defer bc.Close()
 
 	fmt.Println("Done!")
 }
@@ -139,13 +140,13 @@ func (cli *CLI) getBalance(address string) {
 		log.Panic("ERROR: Address is not valid")
 	}
 
-	bc := blockchain.NewBlockchain()
-	defer bc.Destroy()
+	bc := blockchain.Open()
+	defer bc.Close()
 
-	UTXO := bc.FindUnspentOutputs(address)
+	unspentOutputs := bc.FindUnspentOutputs(address)
 
 	balance := 0
-	for _, out := range(UTXO) {
+	for _, out := range unspentOutputs {
 		balance += out.Value
 	}
 
@@ -176,8 +177,8 @@ func (cli *CLI) send(from string, to string, amount int) {
 		log.Panic("ERROR: Recipient address is not valid")
 	}
 
-	bc := blockchain.NewBlockchain()
-	defer bc.Destroy()
+	bc := blockchain.Open()
+	defer bc.Close()
 
 	tx, err := blockchain.NewUTXOTransaction(from, to, amount, bc)
 	if err != nil {

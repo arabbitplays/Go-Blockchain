@@ -1,28 +1,28 @@
 package blockchain
 
 import (
-	"fmt"
-	"errors"
+	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"log"
-	"bytes"
 )
 
 const subsidy = 10
 
 type Transaction struct {
-	ID []byte
-	Vin []TXInput
+	ID   []byte
+	Vin  []TXInput
 	Vout []TXOutput
 }
 
 func (tx *Transaction) Serialize() []byte {
 	var result bytes.Buffer
 	encoder := gob.NewEncoder(&result)
-	
-	err  := encoder.Encode(tx)
+
+	err := encoder.Encode(tx)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -38,7 +38,7 @@ func (tx *Transaction) Hash() []byte {
 
 	hash = sha256.Sum256(txCopy.Serialize())
 
-	return hash[:] 
+	return hash[:]
 }
 
 func IsCoinbaseTX(tx *Transaction) bool {
@@ -75,11 +75,11 @@ func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Tr
 	walletRepo := NewWalletRepo()
 	wallet := walletRepo.GetWallet(from)
 
-	for txid, outIndices := range spendableOutputs {
-		txId, _ := hex.DecodeString(txid)
+	for txIDHex, outIndices := range spendableOutputs {
+		txID, _ := hex.DecodeString(txIDHex)
 
 		for _, outIdx := range outIndices {
-			in := TXInput{txId, outIdx, nil, wallet.PublicKey}
+			in := TXInput{txID, outIdx, nil, wallet.PublicKey}
 			inputs = append(inputs, in)
 		}
 	}
@@ -106,39 +106,38 @@ func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map
 
 	accumulatedValue := 0
 
-	Work:
-	for _, tx := range(unspentTXs) {
-		txId := hex.EncodeToString(tx.ID)
-		for outIdx, out := range(tx.Vout) {
+Work:
+	for _, tx := range unspentTXs {
+		txID := hex.EncodeToString(tx.ID)
+		for outIdx, out := range tx.Vout {
 			if out.IsLockedWithKey(pubKeyHash) {
 				accumulatedValue += out.Value
-				spendableOutputs[txId] = append(spendableOutputs[txId], outIdx)
+				spendableOutputs[txID] = append(spendableOutputs[txID], outIdx)
 
 				if accumulatedValue >= amount {
 					break Work
 				}
 			}
 		}
-	} 
+	}
 
 	return accumulatedValue, spendableOutputs
 }
 
 func (bc *Blockchain) FindUnspentOutputs(address string) []TXOutput {
-	var UTXO []TXOutput
+	var unspentOutputs []TXOutput
 	pubKeyHash := GetPubKeyHashFromAddress([]byte(address))
 	unspentTXs := bc.findUnspentTransactions(pubKeyHash)
 
-
-	for _, tx := range(unspentTXs) {
-		for _, out := range(tx.Vout) {
+	for _, tx := range unspentTXs {
+		for _, out := range tx.Vout {
 			if out.IsLockedWithKey(pubKeyHash) {
-				UTXO = append(UTXO, out)
+				unspentOutputs = append(unspentOutputs, out)
 			}
 		}
-	} 
+	}
 
-	return UTXO
+	return unspentOutputs
 }
 
 func (bc *Blockchain) findUnspentTransactions(pubKeyHash []byte) []Transaction {
@@ -149,13 +148,13 @@ func (bc *Blockchain) findUnspentTransactions(pubKeyHash []byte) []Transaction {
 	for {
 		block := iter.Next()
 
-		for _, tx := range(block.Transactions) {
-			txId := hex.EncodeToString(tx.ID)
+		for _, tx := range block.Transactions {
+			txID := hex.EncodeToString(tx.ID)
 
-			Outputs:
-			for outIdx, out := range(tx.Vout) {
-				if spentTXOs[txId] != nil {
-					for _, spentOut := range(spentTXOs[txId]) {
+		Outputs:
+			for outIdx, out := range tx.Vout {
+				if spentTXOs[txID] != nil {
+					for _, spentOut := range spentTXOs[txID] {
 						if spentOut == outIdx {
 							continue Outputs
 						}
@@ -168,10 +167,10 @@ func (bc *Blockchain) findUnspentTransactions(pubKeyHash []byte) []Transaction {
 			}
 
 			if IsCoinbaseTX(tx) == false {
-				for _, in := range(tx.Vin) {
+				for _, in := range tx.Vin {
 					if in.UsesKey(pubKeyHash) {
-						inTxId := hex.EncodeToString(in.TxId)
-						spentTXOs[inTxId] = append(spentTXOs[inTxId], in.Vout)
+						inTxID := hex.EncodeToString(in.TxID)
+						spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
 					}
 				}
 			}
@@ -184,5 +183,3 @@ func (bc *Blockchain) findUnspentTransactions(pubKeyHash []byte) []Transaction {
 
 	return unspentTXs
 }
-
-

@@ -2,22 +2,23 @@ package blockchain
 
 import (
 	"fmt"
-	"os"
 	"log"
+	"os"
+
 	"github.com/boltdb/bolt"
 )
 
 type Blockchain struct {
 	tip []byte
-	db *bolt.DB
+	db  *bolt.DB
 }
 
 const dbFile = "blockchain_%s.db"
-const nodeId = "oschdi"
+const nodeID = "oschdi"
 const blocksBucket = "blocks"
 const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
 
-func (bc* Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
+func (bc *Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
 	var lastHash []byte
 
 	err := bc.db.View(func(tx *bolt.Tx) error {
@@ -59,8 +60,8 @@ func newGenesisBlock(coinbase *Transaction) *Block {
 	return NewBlock([]*Transaction{coinbase}, []byte{})
 }
 
-func CreateBlockchain(address string) *Blockchain {
-	dbFile := fmt.Sprintf(dbFile, nodeId)
+func Create(address string) *Blockchain {
+	dbFile := fmt.Sprintf(dbFile, nodeID)
 	if dbExists(dbFile) {
 		fmt.Println("Blockchain already exists!")
 		os.Exit(1)
@@ -105,9 +106,9 @@ func CreateBlockchain(address string) *Blockchain {
 
 	return &bc
 }
- 
-func NewBlockchain() *Blockchain {
-	dbFile := fmt.Sprintf(dbFile, nodeId)
+
+func Open() *Blockchain {
+	dbFile := fmt.Sprintf(dbFile, nodeID)
 	if dbExists(dbFile) == false {
 		fmt.Println("Blockchain does not exist, create it first!")
 		os.Exit(1)
@@ -135,7 +136,7 @@ func NewBlockchain() *Blockchain {
 	return &bc
 }
 
-func (bc *Blockchain) Destroy() {
+func (bc *Blockchain) Close() {
 	bc.db.Close()
 }
 

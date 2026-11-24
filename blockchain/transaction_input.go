@@ -5,7 +5,7 @@ import (
 )
 
 type TXInput struct {
-	TxId []byte
+	TxID []byte
 	Vout int
 	Signature [] byte
 	PubKey []byte
