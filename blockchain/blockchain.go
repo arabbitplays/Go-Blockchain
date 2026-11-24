@@ -17,19 +17,25 @@ const nodeId = "oschdi"
 const blocksBucket = "blocks"
 const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
 
-func (bc *Blockchain) AddBlock(transactions []*Transaction) {
+func (bc* Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
 	var lastHash []byte
 
-	// TODO error handling -> how do transactions work here?
-	_ = bc.db.View(func(tx *bolt.Tx) error {
+	err := bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		lastHash = b.Get([]byte("l"))
 
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	newBlock := NewBlock(transactions, lastHash)
+	return newBlock, nil
+}
 
+func (bc *Blockchain) AddBlock(newBlock *Block) {
+	// TODO error handling
 	_ = bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		encodedBlock, _ := newBlock.Serialize()

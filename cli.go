@@ -48,14 +48,14 @@ func (cli *CLI) Run() {
 	// listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
 	// printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
 	// reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
-	// sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
+	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	// startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
 
 	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
-	// sendFrom := sendCmd.String("from", "", "Source wallet address")
-	// sendTo := sendCmd.String("to", "", "Destination wallet address")
-	// sendAmount := sendCmd.Int("amount", 0, "Amount to send")
+	sendFrom := sendCmd.String("from", "", "Source wallet address")
+	sendTo := sendCmd.String("to", "", "Destination wallet address")
+	sendAmount := sendCmd.Int("amount", 0, "Amount to send")
 	// sendMine := sendCmd.Bool("mine", false, "Mine immediately on the same node")
 	// startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
 
@@ -95,11 +95,11 @@ func (cli *CLI) Run() {
 	// 	if err != nil {
 	// 		log.Panic(err)
 	// 	}
-	// case "send":
-	// 	err := sendCmd.Parse(os.Args[2:])
-	// 	if err != nil {
-	// 		log.Panic(err)
-	// 	}
+	case "send":
+		err := sendCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 	// case "startnode":
 	// 	err := startNodeCmd.Parse(os.Args[2:])
 	// 	if err != nil {
@@ -120,6 +120,10 @@ func (cli *CLI) Run() {
 
 	if getBalanceCmd.Parsed() {
 		cli.getBalance(*getBalanceAddress)
+	}
+
+	if sendCmd.Parsed() {
+		cli.send(*sendFrom, *sendTo, *sendAmount)
 	}
 }
 
@@ -142,6 +146,24 @@ func (cli *CLI) getBalance(address string) {
 	}
 
 	fmt.Printf("Balance of '%s': %d\n", address, balance)
+}
+
+func (cli *CLI) send(from string, to string, amount int) {
+	bc := blockchain.NewBlockchain()
+	defer bc.Destroy()
+
+	tx, err := blockchain.NewUTXOTransaction(from, to, amount, bc)
+	if err != nil {
+		fmt.Printf("Failed to send: %v\n", err)
+		os.Exit(1)
+	}
+
+	block, err := bc.MineBlock([]*blockchain.Transaction{tx})
+	if err != nil {
+		fmt.Printf("Failed to send: %v\n", err)
+		os.Exit(1)
+	}
+	bc.AddBlock(block)
 }
 
 func (cli *CLI) printChain() {

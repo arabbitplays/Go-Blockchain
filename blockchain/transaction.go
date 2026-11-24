@@ -2,6 +2,7 @@ package blockchain
 
 import (
 	"fmt"
+	"errors"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
@@ -66,6 +67,65 @@ func NewCoinbaseTX(to, data string) *Transaction {
 	tx.ID = tx.Hash()
 
 	return &tx
+}
+
+func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Transaction, error) {
+	var inputs []TXInput
+	var outputs []TXOutput
+
+	acc, spendableOutputs := bc.FindSpendableOutputs(from, amount)
+
+	if acc < amount {
+		msg := fmt.Sprintf("Balance %d of account '%s' is not enough to create transaction with amount %d", acc, from, amount)
+		return nil, errors.New(msg)
+	}
+
+	for txid, outIndices := range spendableOutputs {
+		txId, _ := hex.DecodeString(txid)
+
+		for _, outIdx := range outIndices {
+			in := TXInput{txId, outIdx, from}
+			inputs = append(inputs, in)
+		}
+	}
+
+	spentOutput := TXOutput{amount, to}
+	outputs = append(outputs, spentOutput)
+
+	if acc > amount {
+		change := acc - amount
+		changeOutput := TXOutput{change, from}
+		outputs = append(outputs, changeOutput)
+	}
+
+	tx := Transaction{nil, inputs, outputs}
+	tx.ID = tx.Hash()
+
+	return &tx, nil
+}
+
+func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
+	spendableOutputs := make(map[string][]int)
+	unspentTXs := bc.findUnspentTransactions(address)
+
+	accumulatedValue := 0
+
+	Work:
+	for _, tx := range(unspentTXs) {
+		txId := hex.EncodeToString(tx.ID)
+		for outIdx, out := range(tx.Vout) {
+			if out.CanBeUnlockedWith(address) {
+				accumulatedValue += out.Value
+				spendableOutputs[txId] = append(spendableOutputs[txId], outIdx)
+
+				if accumulatedValue >= amount {
+					break Work
+				}
+			}
+		}
+	} 
+
+	return accumulatedValue, spendableOutputs
 }
 
 func (bc *Blockchain) FindUnspentOutputs(address string) []TXOutput {
