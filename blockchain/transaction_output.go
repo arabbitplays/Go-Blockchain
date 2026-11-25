@@ -5,8 +5,8 @@ import (
 )
 
 type TXOutput struct {
-	Value int
-	PubKeyHash []byte 
+	Value      int
+	PubKeyHash []byte
 }
 
 func NewTXOutput(value int, address string) *TXOutput {
@@ -22,6 +22,5 @@ func (out *TXOutput) Lock(address []byte) {
 }
 
 func (out *TXOutput) IsLockedWithKey(pubKeyHash []byte) bool {
-	return bytes.Compare(out.PubKeyHash, pubKeyHash) == 0 
+	return bytes.Equal(out.PubKeyHash, pubKeyHash)
 }
-

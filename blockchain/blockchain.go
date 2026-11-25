@@ -21,6 +21,12 @@ const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second
 func (bc *Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
 	var lastHash []byte
 
+	for _, tx := range transactions {
+		if tx.Verify(bc.FindReferencedTransactions(tx)) == false {
+			log.Panic("Transaction has invalid signature")
+		}
+	}
+
 	err := bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		lastHash = b.Get([]byte("l"))

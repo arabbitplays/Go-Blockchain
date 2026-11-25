@@ -59,7 +59,7 @@ func ValidateAddress(address string) bool {
 	payload := decoded[:len(decoded)-addressChecksumLen]
 
 	targetChecksum := checksum(payload)
-	return bytes.Compare(actualChecksum, targetChecksum) == 0
+	return bytes.Equal(actualChecksum, targetChecksum)
 }
 
 func HashPubKey(pubKey []byte) []byte {
