@@ -3,7 +3,6 @@ package blockchain
 import (
 	"fmt"
 	"log"
-	"os"
 )
 
 type Client struct {
@@ -13,70 +12,113 @@ type Client struct {
 }
 
 func NewClient(nodeID string) *Client {
-	bc := Open()
-	utxoSet := NewUTXOSet(bc)
-	defer bc.Close()
+	client := &Client{nodeID: nodeID}
+	if !dbExists(fmt.Sprintf(dbFile, nodeID)) {
+		return client
+	}
 
-	client := Client{nodeID, bc, utxoSet}
-	return &client
+	bc := Open(nodeID)
+	client.blockchain = bc
+	client.utxoSet = NewUTXOSet(bc)
+
+	return client
 }
 
-func (client *Client) GetBalance(address string) {
+func (client *Client) Close() {
+	if client.blockchain == nil {
+		return
+	}
+
+	client.blockchain.Close()
+	client.blockchain = nil
+	client.utxoSet = nil
+}
+
+func (client *Client) CreateBlockchain(address string) {
+	client.blockchain = Create(client.nodeID, address)
+	client.utxoSet = NewUTXOSet(client.blockchain)
+	client.utxoSet.Reindex()
+}
+
+func (client *Client) GetBalance(address string) (int, error) {
 	if !ValidateAddress(address) {
-		log.Panic("ERROR: Address is not valid")
+		return 0, fmt.Errorf("ERROR: Address is not valid")
 	}
 
 	publicKeyHash := GetPubKeyHashFromAddress([]byte(address))
-	unspentOutputs := client.utxoSet.FindUnspentOutputs(publicKeyHash)
+	unspentOutputs, err := client.utxoSet.FindUnspentOutputs(publicKeyHash)
+	if err != nil {
+		return 0, err
+	}
 
 	balance := 0
 	for _, out := range unspentOutputs {
 		balance += out.Value
 	}
 
-	fmt.Printf("Balance of '%s': %d\n", address, balance)
+	return balance, nil
 }
 
-func (client *Client) CreateWallet() {
-	walletRepo := NewWalletRepo()
+func (client *Client) CreateWallet() string {
+	walletRepo := NewWalletRepo(client.nodeID)
 	wallet := walletRepo.CreateNewWallet()
 
-	fmt.Printf("Your new address: %s", wallet.GetAddress())
+	return string(wallet.GetAddress())
 }
 
-func (client *Client) ListAddresses() {
-	walletRepo := NewWalletRepo()
-	addresses := walletRepo.GetAddresses()
-
-	for _, adr := range addresses {
-		fmt.Printf("%s\n", adr)
-	}
+func (client *Client) ListAddresses() []string {
+	walletRepo := NewWalletRepo(client.nodeID)
+	return walletRepo.GetAddresses()
 }
 
 func (client *Client) ReindexUTXO() {
 	client.utxoSet.Reindex()
 }
 
-func (client *Client) Send(from string, to string, amount int) {
+func (client *Client) Blocks() []*Block {
+	iter := client.blockchain.Iterator()
+	var blocks []*Block
+
+	for {
+		block := iter.Next()
+		blocks = append(blocks, block)
+
+		if len(block.PrevBlockHash) == 0 {
+			break
+		}
+	}
+
+	return blocks
+}
+
+func (client *Client) Send(from string, to string, amount int) error {
 	if !ValidateAddress(from) {
-		log.Panic("ERROR: Sender address is not valid")
+		return fmt.Errorf("ERROR: Sender address is not valid")
 	}
 	if !ValidateAddress(to) {
-		log.Panic("ERROR: Recipient address is not valid")
+		return fmt.Errorf("ERROR: Recipient address is not valid")
 	}
 
-	tx, err := NewUTXOTransaction(from, to, amount, client.blockchain)
+	tx, err := NewUTXOTransaction(client.nodeID, from, to, amount, client.blockchain)
 	if err != nil {
-		fmt.Printf("Failed to send: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	cbtx := NewCoinbaseTX(from, "")
 
+	cbtx := NewCoinbaseTX(client.nodeID, from, "")
 	block, err := client.blockchain.MineBlock([]*Transaction{cbtx, tx})
 	if err != nil {
-		fmt.Printf("Failed to send: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	client.blockchain.AddBlock(block)
-	client.utxoSet.Update(block)
+
+	// TODO bundle these into one transaction or add tip marker to utxo set
+	err = client.blockchain.AddBlock(block)
+	if err != nil {
+		log.Panic(err)
+	}
+	err = client.utxoSet.Update(block)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return nil
 }

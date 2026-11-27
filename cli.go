@@ -10,6 +10,7 @@ import (
 )
 
 type CLI struct {
+	nodeID string
 }
 
 func (cli *CLI) printUsage() {
@@ -103,22 +104,25 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
-	client := blockchain.NewClient("oschdi")
+	cli.nodeID = os.Getenv("NODE_ID")
+	if cli.nodeID == "" {
+		cli.nodeID = "oschdi"
+	}
 
 	if createBlockchainCmd.Parsed() {
 		cli.createBlockchain(*createBlockchainAddress)
 	}
 
 	if getBalanceCmd.Parsed() {
-		client.GetBalance(*getBalanceAddress)
+		cli.getBalance(*getBalanceAddress)
 	}
 
 	if createWalletCmd.Parsed() {
-		client.CreateWallet()
+		cli.createWallet()
 	}
 
 	if listAddressesCmd.Parsed() {
-		client.ListAddresses()
+		cli.listAddresses()
 	}
 
 	if printChainCmd.Parsed() {
@@ -126,54 +130,85 @@ func (cli *CLI) Run() {
 	}
 
 	if reindexUTXOCmd.Parsed() {
-		client.ReindexUTXO()
+		cli.reindexUTXO()
 	}
 
 	if sendCmd.Parsed() {
-		client.Send(*sendFrom, *sendTo, *sendAmount)
+		cli.send(*sendFrom, *sendTo, *sendAmount)
 	}
 }
 
 func (cli *CLI) createBlockchain(address string) {
-	bc := blockchain.Create(address)
-	defer bc.Close()
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
 
-	utxoSet := blockchain.NewUTXOSet(bc)
-	utxoSet.Reindex()
-
+	client.CreateBlockchain(address)
 	fmt.Println("Done!")
 }
 
+func (cli *CLI) getBalance(address string) {
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
+
+	balance, err := client.GetBalance(address)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	fmt.Printf("Balance of '%s': %d\n", address, balance)
+}
+
+func (cli *CLI) createWallet() {
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
+
+	fmt.Printf("Your new address: %s", client.CreateWallet())
+}
+
+func (cli *CLI) listAddresses() {
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
+
+	for _, address := range client.ListAddresses() {
+		fmt.Printf("%s\n", address)
+	}
+}
+
 func (cli *CLI) printChain() {
-	// bc := blockchain.NewBlockchain()
-	// defer bc.Destroy()
-	//
-	// bci := bc.Iterator()
-	// for {
-	// 	block := bci.Next()
-	//
-	// 	fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
-	// 	//fmt.Printf("Data: %s\n", block.Data)
-	// 	fmt.Printf("Hash: %x\n", block.Hash)
-	// 	pow := blockchain.NewProofOfWork(block)
-	//
-	// 	for txIdx, tx := range(block.Transactions) {
-	// 		fmt.Printf("Transaction %d:\n", txIdx)
-	// 		for _, in := range(tx.Vin) {
-	// 			fmt.Printf("In: %s\n", in.ScriptSig)
-	// 		}
-	//
-	// 		for _, out := range(tx.Vout) {
-	// 			fmt.Printf("Out: %d %s\n", out.Value, out.ScriptPubKey)
-	// 		}
-	// 		fmt.Println()
-	// 	}
-	//
-	// 	fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
-	// 	fmt.Println()
-	//
-	// 	if len(block.PrevBlockHash) == 0 {
-	// 		break
-	// 	}
-	// }
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
+
+	for _, block := range client.Blocks() {
+		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
+		fmt.Printf("Hash: %x\n", block.Hash)
+		fmt.Printf("PoW: %t\n", blockchain.NewProofOfWork(block).Validate())
+
+		for txIdx, tx := range block.Transactions {
+			fmt.Printf("Transaction %d:\n", txIdx)
+			fmt.Printf("  ID: %x\n", tx.ID)
+			for inIdx, in := range tx.Vin {
+				fmt.Printf("  Input %d: TxID %x, Vout %d, PubKey %x\n", inIdx, in.TxID, in.Vout, in.PubKey)
+			}
+			for outIdx, out := range tx.Vout {
+				fmt.Printf("  Output %d: Value %d, PubKeyHash %x\n", outIdx, out.Value, out.PubKeyHash)
+			}
+		}
+		fmt.Println()
+	}
+}
+
+func (cli *CLI) reindexUTXO() {
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
+
+	client.ReindexUTXO()
+}
+
+func (cli *CLI) send(from string, to string, amount int) {
+	client := blockchain.NewClient(cli.nodeID)
+	defer client.Close()
+
+	if err := client.Send(from, to, amount); err != nil {
+		log.Panic(err)
+	}
 }

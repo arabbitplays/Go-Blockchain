@@ -16,7 +16,6 @@ type Blockchain struct {
 
 const dbFile = "blockchain_%s.db"
 const blocksBucket = "blocks"
-const nodeID = "oschdi"
 const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
 
 func (bc *Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
@@ -42,32 +41,32 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
 	return newBlock, nil
 }
 
-func (bc *Blockchain) AddBlock(newBlock *Block) {
-	// TODO error handling
-	_ = bc.db.Update(func(tx *bolt.Tx) error {
+func (bc *Blockchain) AddBlock(newBlock *Block) error {
+	err := bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		encodedBlock, _ := newBlock.Serialize()
 		err := b.Put(newBlock.Hash, encodedBlock)
 		if err != nil {
-			log.Panic(err)
+			return err
 		}
 
 		err = b.Put([]byte("l"), newBlock.Hash)
 		if err != nil {
-			log.Panic(err)
+			return err
 		}
 
 		bc.tip = newBlock.Hash
 
 		return nil
 	})
+	return err
 }
 
 func newGenesisBlock(coinbase *Transaction) *Block {
 	return NewBlock([]*Transaction{coinbase}, []byte{})
 }
 
-func Create(address string) *Blockchain {
+func Create(nodeID string, address string) *Blockchain {
 	dbFile := fmt.Sprintf(dbFile, nodeID)
 	if dbExists(dbFile) {
 		fmt.Println("Blockchain already exists!")
@@ -81,7 +80,7 @@ func Create(address string) *Blockchain {
 
 	var tip []byte
 
-	coinbase := NewCoinbaseTX(address, genesisCoinbaseData)
+	coinbase := NewCoinbaseTX(nodeID, address, genesisCoinbaseData)
 	genesis := newGenesisBlock(coinbase)
 
 	err = db.Update(func(tx *bolt.Tx) error {
@@ -114,7 +113,7 @@ func Create(address string) *Blockchain {
 	return &bc
 }
 
-func Open() *Blockchain {
+func Open(nodeID string) *Blockchain {
 	dbFile := fmt.Sprintf(dbFile, nodeID)
 	if dbExists(dbFile) == false {
 		fmt.Println("Blockchain does not exist, create it first!")
@@ -145,6 +144,11 @@ func Open() *Blockchain {
 
 func (bc *Blockchain) Close() {
 	bc.db.Close()
+}
+
+func Destroy(nodeID string) {
+	filename := fmt.Sprintf(dbFile, nodeID)
+	os.Remove(filename)
 }
 
 func dbExists(dbFile string) bool {

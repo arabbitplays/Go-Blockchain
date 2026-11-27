@@ -49,7 +49,7 @@ func IsCoinbaseTX(tx *Transaction) bool {
 	return len(tx.Vin) == 1 && tx.Vin[0].Vout == -1
 }
 
-func NewCoinbaseTX(to string, data string) *Transaction {
+func NewCoinbaseTX(nodeID string, to string, data string) *Transaction {
 	if data == "" {
 		randData := make([]byte, 20)
 		_, err := rand.Read(randData)
@@ -60,7 +60,7 @@ func NewCoinbaseTX(to string, data string) *Transaction {
 		data = fmt.Sprintf("%x", randData)
 	}
 
-	walletRepo := NewWalletRepo()
+	walletRepo := NewWalletRepo(nodeID)
 	wallet := walletRepo.GetWallet(to)
 
 	txIn := TXInput{[]byte{}, -1, nil, []byte(data)}
@@ -71,20 +71,20 @@ func NewCoinbaseTX(to string, data string) *Transaction {
 	return &tx
 }
 
-func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Transaction, error) {
+func NewUTXOTransaction(nodeID string, from string, to string, amount int, bc *Blockchain) (*Transaction, error) {
 	var inputs []TXInput
 	var outputs []TXOutput
 
 	utxoSet := NewUTXOSet(bc)
 	publicKeyHash := GetPubKeyHashFromAddress([]byte(from))
-	acc, spendableOutputs := utxoSet.FindSpendableOutputs(publicKeyHash, amount)
+	acc, spendableOutputs, _ := utxoSet.FindSpendableOutputs(publicKeyHash, amount)
 
 	if acc < amount {
 		msg := fmt.Sprintf("Balance %d of account '%s' is not enough to create transaction with amount %d", acc, from, amount)
 		return nil, errors.New(msg)
 	}
 
-	walletRepo := NewWalletRepo()
+	walletRepo := NewWalletRepo(nodeID)
 	wallet := walletRepo.GetWallet(from)
 
 	for txIDHex, outIndices := range spendableOutputs {

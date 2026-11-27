@@ -10,13 +10,15 @@ import (
 )
 
 type WalletRepo struct {
+	nodeID  string
 	Wallets map[string]*Wallet
 }
 
 const walletFile = "wallet_%s.dat"
 
-func NewWalletRepo() *WalletRepo {
+func NewWalletRepo(nodeID string) *WalletRepo {
 	var repo WalletRepo
+	repo.nodeID = nodeID
 	repo.Wallets = make(map[string]*Wallet)
 
 	repo.loadFromFile()
@@ -47,7 +49,7 @@ func (repo *WalletRepo) GetWallet(address string) Wallet {
 }
 
 func (repo *WalletRepo) loadFromFile() error {
-	walletFile := fmt.Sprintf(walletFile, nodeID)
+	walletFile := fmt.Sprintf(walletFile, repo.nodeID)
 	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
 		return err
 	}
@@ -80,9 +82,14 @@ func (repo WalletRepo) saveToFile() {
 		log.Panic(err)
 	}
 
-	walletFile := fmt.Sprintf(walletFile, nodeID)
+	walletFile := fmt.Sprintf(walletFile, repo.nodeID)
 	os.WriteFile(walletFile, content.Bytes(), 0644)
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+func (repo WalletRepo) Destroy() {
+	walletFile := fmt.Sprintf(walletFile, repo.nodeID)
+	os.Remove(walletFile)
 }
