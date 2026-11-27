@@ -45,7 +45,7 @@ func (cli *CLI) Run() {
 	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
 	listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
-	// reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
+	reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	// startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
 
@@ -83,11 +83,11 @@ func (cli *CLI) Run() {
 		if err != nil {
 			log.Panic(err)
 		}
-	// case "reindexutxo":
-	// 	err := reindexUTXOCmd.Parse(os.Args[2:])
-	// 	if err != nil {
-	// 		log.Panic(err)
-	// 	}
+	case "reindexutxo":
+		err := reindexUTXOCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 	case "send":
 		err := sendCmd.Parse(os.Args[2:])
 		if err != nil {
@@ -103,28 +103,34 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
+	client := blockchain.NewClient("oschdi")
+
 	if createBlockchainCmd.Parsed() {
 		cli.createBlockchain(*createBlockchainAddress)
 	}
 
 	if getBalanceCmd.Parsed() {
-		cli.getBalance(*getBalanceAddress)
+		client.GetBalance(*getBalanceAddress)
 	}
 
 	if createWalletCmd.Parsed() {
-		cli.createWallet()
+		client.CreateWallet()
 	}
 
 	if listAddressesCmd.Parsed() {
-		cli.listAddresses()
+		client.ListAddresses()
 	}
 
 	if printChainCmd.Parsed() {
 		cli.printChain()
 	}
 
+	if reindexUTXOCmd.Parsed() {
+		client.ReindexUTXO()
+	}
+
 	if sendCmd.Parsed() {
-		cli.send(*sendFrom, *sendTo, *sendAmount)
+		client.Send(*sendFrom, *sendTo, *sendAmount)
 	}
 }
 
@@ -132,66 +138,10 @@ func (cli *CLI) createBlockchain(address string) {
 	bc := blockchain.Create(address)
 	defer bc.Close()
 
+	utxoSet := blockchain.NewUTXOSet(bc)
+	utxoSet.Reindex()
+
 	fmt.Println("Done!")
-}
-
-func (cli *CLI) getBalance(address string) {
-	if !blockchain.ValidateAddress(address) {
-		log.Panic("ERROR: Address is not valid")
-	}
-
-	bc := blockchain.Open()
-	defer bc.Close()
-
-	unspentOutputs := bc.FindUnspentOutputs(address)
-
-	balance := 0
-	for _, out := range unspentOutputs {
-		balance += out.Value
-	}
-
-	fmt.Printf("Balance of '%s': %d\n", address, balance)
-}
-
-func (cli *CLI) createWallet() {
-	walletRepo := blockchain.NewWalletRepo()
-	wallet := walletRepo.CreateNewWallet()
-
-	fmt.Printf("Your new address: %s", wallet.GetAddress())
-}
-
-func (cli *CLI) listAddresses() {
-	walletRepo := blockchain.NewWalletRepo()
-	addresses := walletRepo.GetAddresses()
-
-	for _, adr := range addresses {
-		fmt.Printf("%s\n", adr)
-	}
-}
-
-func (cli *CLI) send(from string, to string, amount int) {
-	if !blockchain.ValidateAddress(from) {
-		log.Panic("ERROR: Sender address is not valid")
-	}
-	if !blockchain.ValidateAddress(to) {
-		log.Panic("ERROR: Recipient address is not valid")
-	}
-
-	bc := blockchain.Open()
-	defer bc.Close()
-
-	tx, err := blockchain.NewUTXOTransaction(from, to, amount, bc)
-	if err != nil {
-		fmt.Printf("Failed to send: %v\n", err)
-		os.Exit(1)
-	}
-
-	block, err := bc.MineBlock([]*blockchain.Transaction{tx})
-	if err != nil {
-		fmt.Printf("Failed to send: %v\n", err)
-		os.Exit(1)
-	}
-	bc.AddBlock(block)
 }
 
 func (cli *CLI) printChain() {

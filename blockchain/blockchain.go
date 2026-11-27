@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -14,8 +15,8 @@ type Blockchain struct {
 }
 
 const dbFile = "blockchain_%s.db"
-const nodeID = "oschdi"
 const blocksBucket = "blocks"
+const nodeID = "oschdi"
 const genesisCoinbaseData = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
 
 func (bc *Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
@@ -151,4 +152,47 @@ func dbExists(dbFile string) bool {
 		return false
 	}
 	return true
+}
+
+func (bc *Blockchain) FindUTXO() map[string]TXOutputs {
+	iter := bc.Iterator()
+
+	utxo := make(map[string]TXOutputs)
+	spentTXOs := make(map[string][]int)
+
+	for {
+		block := iter.Next()
+
+		for _, tx := range block.Transactions {
+			txID := hex.EncodeToString(tx.ID)
+
+		Outputs:
+			for outIdx, out := range tx.Vout {
+				if spentTXOs[txID] != nil {
+					for _, spentOut := range spentTXOs[txID] {
+						if spentOut == outIdx {
+							continue Outputs
+						}
+					}
+				}
+
+				outs := utxo[txID]
+				outs.Outputs = append(outs.Outputs, out)
+				utxo[txID] = outs
+			}
+
+			if IsCoinbaseTX(tx) == false {
+				for _, in := range tx.Vin {
+					inTxID := hex.EncodeToString(in.TxID)
+					spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
+				}
+			}
+		}
+
+		if len(block.PrevBlockHash) == 0 {
+			break
+		}
+	}
+
+	return utxo
 }

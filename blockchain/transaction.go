@@ -51,7 +51,13 @@ func IsCoinbaseTX(tx *Transaction) bool {
 
 func NewCoinbaseTX(to string, data string) *Transaction {
 	if data == "" {
-		data = fmt.Sprintf("Reward to: %s", to)
+		randData := make([]byte, 20)
+		_, err := rand.Read(randData)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		data = fmt.Sprintf("%x", randData)
 	}
 
 	walletRepo := NewWalletRepo()
@@ -69,7 +75,9 @@ func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Tr
 	var inputs []TXInput
 	var outputs []TXOutput
 
-	acc, spendableOutputs := bc.FindSpendableOutputs(from, amount)
+	utxoSet := NewUTXOSet(bc)
+	publicKeyHash := GetPubKeyHashFromAddress([]byte(from))
+	acc, spendableOutputs := utxoSet.FindSpendableOutputs(publicKeyHash, amount)
 
 	if acc < amount {
 		msg := fmt.Sprintf("Balance %d of account '%s' is not enough to create transaction with amount %d", acc, from, amount)
@@ -102,91 +110,6 @@ func NewUTXOTransaction(from string, to string, amount int, bc *Blockchain) (*Tr
 	tx.Sign(wallet.PrivateKey, bc.FindReferencedTransactions(&tx))
 
 	return &tx, nil
-}
-
-func (bc *Blockchain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
-	spendableOutputs := make(map[string][]int)
-	pubKeyHash := GetPubKeyHashFromAddress([]byte(address))
-	unspentTXs := bc.findUnspentTransactions(pubKeyHash)
-
-	accumulatedValue := 0
-
-Work:
-	for _, tx := range unspentTXs {
-		txID := hex.EncodeToString(tx.ID)
-		for outIdx, out := range tx.Vout {
-			if out.IsLockedWithKey(pubKeyHash) {
-				accumulatedValue += out.Value
-				spendableOutputs[txID] = append(spendableOutputs[txID], outIdx)
-
-				if accumulatedValue >= amount {
-					break Work
-				}
-			}
-		}
-	}
-
-	return accumulatedValue, spendableOutputs
-}
-
-func (bc *Blockchain) FindUnspentOutputs(address string) []TXOutput {
-	var unspentOutputs []TXOutput
-	pubKeyHash := GetPubKeyHashFromAddress([]byte(address))
-	unspentTXs := bc.findUnspentTransactions(pubKeyHash)
-
-	for _, tx := range unspentTXs {
-		for _, out := range tx.Vout {
-			if out.IsLockedWithKey(pubKeyHash) {
-				unspentOutputs = append(unspentOutputs, out)
-			}
-		}
-	}
-
-	return unspentOutputs
-}
-
-func (bc *Blockchain) findUnspentTransactions(pubKeyHash []byte) []Transaction {
-	iter := bc.Iterator()
-	var unspentTXs []Transaction
-	spentTXOs := make(map[string][]int)
-
-	for {
-		block := iter.Next()
-
-		for _, tx := range block.Transactions {
-			txID := hex.EncodeToString(tx.ID)
-
-		Outputs:
-			for outIdx, out := range tx.Vout {
-				if spentTXOs[txID] != nil {
-					for _, spentOut := range spentTXOs[txID] {
-						if spentOut == outIdx {
-							continue Outputs
-						}
-					}
-				}
-
-				if out.IsLockedWithKey(pubKeyHash) {
-					unspentTXs = append(unspentTXs, *tx)
-				}
-			}
-
-			if IsCoinbaseTX(tx) == false {
-				for _, in := range tx.Vin {
-					if in.UsesKey(pubKeyHash) {
-						inTxID := hex.EncodeToString(in.TxID)
-						spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
-					}
-				}
-			}
-		}
-
-		if len(block.PrevBlockHash) == 0 {
-			break
-		}
-	}
-
-	return unspentTXs
 }
 
 func (bc *Blockchain) FindReferencedTransactions(tx *Transaction) map[string]Transaction {
@@ -242,6 +165,10 @@ func (tx *Transaction) Sign(privateKey ecdsa.PrivateKey, prevTXs map[string]Tran
 }
 
 func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
+	if IsCoinbaseTX(tx) {
+		return true
+	}
+
 	txCopy := tx.TrimmedCopy()
 	curve := elliptic.P256()
 
